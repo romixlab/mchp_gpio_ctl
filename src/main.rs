@@ -86,12 +86,12 @@ fn is_pwr_on(interface: &Interface) -> bool {
     is_on
 }
 
-// fn is_pwr_fault(interface: &Interface) -> bool {
-//     // write_reg(interface, 0x0832, 0);
-//     let reg = read_reg(&interface, 0x0839);
-//     let is_fault = (reg & (1 << 2)) == 0;
-//     is_fault
-// }
+fn is_pwr_fault(interface: &Interface) -> bool {
+    // write_reg(interface, 0x0832, 0);
+    let reg = read_reg(&interface, PIO8_15_INPUT);
+    let is_fault = (reg & (1 << 2)) == 0; // PIO10_IN
+    is_fault
+}
 
 fn main() {
     env_logger::init();
@@ -172,6 +172,11 @@ fn main() {
     let interface = device.claim_interface(0).wait().unwrap();
 
     let is_pwr_on = is_pwr_on(&interface);
+    let is_pwr_fault = is_pwr_fault(&interface);
+    if is_pwr_fault {
+        println!("Power FAULT detected, probably short on VBUS?");
+    }
+
     match &cli.command {
         Commands::On => {
             if is_pwr_on {
