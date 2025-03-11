@@ -14,6 +14,10 @@ const PRODUCT_FT234: u16 = 0x6015;
 const CMD_REG_WRITE: u8 = 3;
 const CMD_REG_READ: u8 = 4;
 
+const PIO0_7_DIR: u16 = 0x0833;
+const PIO0_7_OUTPUT: u16 = 0x0837;
+const PIO8_15_INPUT: u16 = 0x083a;
+
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -35,11 +39,11 @@ enum Commands {
     /// Print power status
     Status,
     /// List connected devices serials
-    List
+    List,
 }
 
-fn read_reg(interface: &Interface, addr: u16) -> u32 {
-    let mut buf = [0u8; 4];
+fn read_reg(interface: &Interface, addr: u16) -> u8 {
+    let mut buf = [0u8; 1];
     interface.control_in_blocking(Control {
         control_type: ControlType::Vendor,
         recipient: Recipient::Interface,
@@ -47,23 +51,25 @@ fn read_reg(interface: &Interface, addr: u16) -> u32 {
         value: addr,
         index: 0
     }, &mut buf, Duration::from_millis(500)).unwrap();
-    u32::from_be_bytes(buf)
+    // u32::from_be_bytes(buf)
+    buf[0]
 }
 
-fn write_reg(interface: &Interface, addr: u16, value: u32) {
-    let buf = value.to_be_bytes();
+fn write_reg(interface: &Interface, addr: u16, value: u8) {
+    // let buf = value.to_be_bytes();
+    let buf = &[value];
     interface.control_out_blocking(Control {
         control_type: ControlType::Vendor,
         recipient: Recipient::Interface,
         request: CMD_REG_WRITE,
         value: addr,
         index: 0
-    }, &buf, Duration::from_millis(500)).unwrap();
+    }, &buf[..], Duration::from_millis(500)).unwrap();
 }
 
 fn pwr_ctl(interface: &Interface, turn_on: bool) {
-    write_reg(interface, 0x0830, 1); // GPIO0 as output
-    let mut reg = read_reg(interface, 0x0834);
+    write_reg(interface, PIO0_7_DIR, 1); // GPIO0 as output
+    let mut reg = read_reg(interface, PIO0_7_OUTPUT);
     // println!("{reg:08x}");
     if turn_on {
         reg &= !1; // power switch is inverting
@@ -71,11 +77,11 @@ fn pwr_ctl(interface: &Interface, turn_on: bool) {
         reg |= 1;
     }
     // println!("write {reg:08x}");
-    write_reg(interface, 0x0834, reg);
+    write_reg(interface, PIO0_7_OUTPUT, reg);
 }
 
 fn is_pwr_on(interface: &Interface) -> bool {
-    let reg = read_reg(&interface, 0x0834);
+    let reg = read_reg(&interface, PIO0_7_OUTPUT);
     let is_on = (reg & 1) == 0;
     is_on
 }
