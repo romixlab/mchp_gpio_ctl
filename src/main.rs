@@ -1,3 +1,4 @@
+use std::io::ErrorKind;
 use nusb::{Interface, MaybeFuture};
 use nusb::transfer::{Control, ControlType, Recipient};
 use std::time::Duration;
@@ -40,6 +41,10 @@ enum Commands {
     Status,
     /// List connected devices serials
     List,
+    /// Print udev rule to the stdout, use as follows:
+    /// mchp_gpio_ctl udev | sudo tee /etc/udev/rules.d/70-rm_dongle.rules
+    #[cfg(target_os = "linux")]
+    Udev
 }
 
 fn read_reg(interface: &Interface, addr: u16) -> u8 {
@@ -168,7 +173,17 @@ fn main() {
         }
     };
 
-    let device = di.open().wait().unwrap();
+    let device = match di.open().wait() {
+        Ok(d) => d,
+        Err(e) => {
+            println!("Failed to open device: {}", e);
+            #[cfg(target_os = "linux")]
+            if e.kind() == ErrorKind::PermissionDenied {
+                println!("You are probably missing an udev rule, run 'mchp_gpio_ctl --help' to see how to install it");
+            }
+            return;
+        }
+    };
     let interface = device.claim_interface(0).wait().unwrap();
 
     let is_pwr_on = is_pwr_on(&interface);
@@ -202,5 +217,10 @@ fn main() {
             }
         }
         Commands::List => {}
+        #[cfg(target_os = "linux")]
+        Commands::Udev => {
+            let rule = r#"SUBSYSTEMS=="usb", ATTRS{idVendor}=="0424", ATTRS{idProduct}=="2530", TAG+="uaccess", GROUP="plugdev", MODE="0660""#;
+            println!("{rule}");
+        }
     }
 }
