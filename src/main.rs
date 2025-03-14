@@ -41,9 +41,17 @@ enum Commands {
     Status,
     /// List connected devices serials
     List,
-    /// Print udev rule to the stdout, use as follows:
+
+    /// Print udev rule to the stdout, run 'mchp_gpio_ctl udev --help' for more information
+    ///
+    /// Create udev rule:
     /// mchp_gpio_ctl udev | sudo tee /etc/udev/rules.d/70-rm_dongle.rules
+    ///
+    /// Reload rules and trigger:
+    /// sudo udevadm control --reload-rules
+    /// sudo udevadm trigger
     #[cfg(target_os = "linux")]
+    #[command(verbatim_doc_comment)]
     Udev
 }
 
