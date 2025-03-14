@@ -128,6 +128,12 @@ fn main() {
         }
         return;
     }
+    #[cfg(target_os = "linux")]
+    if matches!(cli.command, Commands::Udev) {
+        let rule = r#"SUBSYSTEMS=="usb", ATTRS{idVendor}=="0424", ATTRS{idProduct}=="2530", TAG+="uaccess", GROUP="plugdev", MODE="0660""#;
+        println!("{rule}");
+        return;
+    }
 
     let di = if devices.len() == 0 {
         println!("No devices found");
@@ -226,9 +232,6 @@ fn main() {
         }
         Commands::List => {}
         #[cfg(target_os = "linux")]
-        Commands::Udev => {
-            let rule = r#"SUBSYSTEMS=="usb", ATTRS{idVendor}=="0424", ATTRS{idProduct}=="2530", TAG+="uaccess", GROUP="plugdev", MODE="0660""#;
-            println!("{rule}");
-        }
+        Commands::Udev => {}
     }
 }
