@@ -1,4 +1,3 @@
-use std::io::ErrorKind;
 use nusb::{Interface, MaybeFuture};
 use nusb::transfer::{Control, ControlType, Recipient};
 use std::time::Duration;
@@ -194,7 +193,7 @@ fn main() {
         Err(e) => {
             println!("Failed to open device: {}", e);
             #[cfg(target_os = "linux")]
-            if e.kind() == ErrorKind::PermissionDenied {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
                 println!("You are probably missing an udev rule, run 'mchp_gpio_ctl --help' to see how to install it");
             }
             return;
