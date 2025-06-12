@@ -132,6 +132,8 @@ fn main() {
     if matches!(cli.command, Commands::Udev) {
         let rule = r#"SUBSYSTEMS=="usb", ATTRS{idVendor}=="0424", ATTRS{idProduct}=="2530", TAG+="uaccess", GROUP="plugdev", MODE="0660""#;
         println!("{rule}");
+        let rule = r#"SUBSYSTEMS=="usb", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", TAG+="uaccess", GROUP="plugdev", MODE="0660""#;
+        println!("{rule}");
         return;
     }
 
