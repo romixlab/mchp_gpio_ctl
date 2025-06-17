@@ -1,4 +1,4 @@
-use nusb::transfer::{Control, ControlType, Recipient};
+use nusb::transfer::{ControlIn, ControlOut, ControlType, Recipient};
 use nusb::{Interface, MaybeFuture};
 use std::time::Duration;
 
@@ -55,19 +55,21 @@ enum Commands {
 }
 
 fn read_reg(interface: &Interface, addr: u16) -> u8 {
-    let mut buf = [0u8; 1];
-    interface
-        .control_in_blocking(
-            Control {
+    // let mut buf = [0u8; 1];
+    let buf = interface
+        .control_in(
+            ControlIn {
                 control_type: ControlType::Vendor,
                 recipient: Recipient::Interface,
                 request: CMD_REG_READ,
                 value: addr,
                 index: 0,
+                length: 1,
             },
-            &mut buf,
+            // &mut buf,
             Duration::from_millis(500),
         )
+        .wait()
         .unwrap();
     // u32::from_be_bytes(buf)
     buf[0]
@@ -77,17 +79,18 @@ fn write_reg(interface: &Interface, addr: u16, value: u8) {
     // let buf = value.to_be_bytes();
     let buf = &[value];
     interface
-        .control_out_blocking(
-            Control {
+        .control_out(
+            ControlOut {
                 control_type: ControlType::Vendor,
                 recipient: Recipient::Interface,
                 request: CMD_REG_WRITE,
                 value: addr,
                 index: 0,
+                data: &buf[..],
             },
-            &buf[..],
             Duration::from_millis(500),
         )
+        .wait()
         .unwrap();
 }
 
