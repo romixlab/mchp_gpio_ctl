@@ -1,8 +1,9 @@
-use nusb::{Interface, MaybeFuture};
 use nusb::transfer::{Control, ControlType, Recipient};
+use nusb::{Interface, MaybeFuture};
 use std::time::Duration;
 
 use clap::{Parser, Subcommand};
+use mchp_gpio_ctl::usb4604_hal;
 
 // [AN1940](https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ApplicationNotes/ApplicationNotes/00001940C.pdf)
 const VENDOR_SMSC: u16 = 0x0424;
@@ -17,7 +18,6 @@ const CMD_REG_READ: u8 = 4;
 const PIO0_7_DIR: u16 = 0x0833;
 const PIO0_7_OUTPUT: u16 = 0x0837;
 const PIO8_15_INPUT: u16 = 0x083a;
-
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -51,18 +51,24 @@ enum Commands {
     /// sudo udevadm trigger
     #[cfg(target_os = "linux")]
     #[command(verbatim_doc_comment)]
-    Udev
+    Udev,
 }
 
 fn read_reg(interface: &Interface, addr: u16) -> u8 {
     let mut buf = [0u8; 1];
-    interface.control_in_blocking(Control {
-        control_type: ControlType::Vendor,
-        recipient: Recipient::Interface,
-        request: CMD_REG_READ,
-        value: addr,
-        index: 0
-    }, &mut buf, Duration::from_millis(500)).unwrap();
+    interface
+        .control_in_blocking(
+            Control {
+                control_type: ControlType::Vendor,
+                recipient: Recipient::Interface,
+                request: CMD_REG_READ,
+                value: addr,
+                index: 0,
+            },
+            &mut buf,
+            Duration::from_millis(500),
+        )
+        .unwrap();
     // u32::from_be_bytes(buf)
     buf[0]
 }
@@ -70,13 +76,19 @@ fn read_reg(interface: &Interface, addr: u16) -> u8 {
 fn write_reg(interface: &Interface, addr: u16, value: u8) {
     // let buf = value.to_be_bytes();
     let buf = &[value];
-    interface.control_out_blocking(Control {
-        control_type: ControlType::Vendor,
-        recipient: Recipient::Interface,
-        request: CMD_REG_WRITE,
-        value: addr,
-        index: 0
-    }, &buf[..], Duration::from_millis(500)).unwrap();
+    interface
+        .control_out_blocking(
+            Control {
+                control_type: ControlType::Vendor,
+                recipient: Recipient::Interface,
+                request: CMD_REG_WRITE,
+                value: addr,
+                index: 0,
+            },
+            &buf[..],
+            Duration::from_millis(500),
+        )
+        .unwrap();
 }
 
 fn pwr_ctl(interface: &Interface, turn_on: bool) {
@@ -111,13 +123,21 @@ fn main() {
 
     let all_devices = nusb::list_devices().wait().unwrap().collect::<Vec<_>>();
     // println!("Devices: {:#?}", all_devices);
-    let devices = all_devices.iter().filter(|d| d.vendor_id() == VENDOR_SMSC && d.product_id() == PRODUCT_BRIDGE_DEV).map(|d| {
-        let same_hub = d.port_chain();
-        let same_hub = &same_hub[..same_hub.len() - 1];
-        let ftdi = all_devices.iter().find(|d| d.port_chain().starts_with(&same_hub) && d.vendor_id() == VENDOR_FTDI && d.product_id() == PRODUCT_FT234);
-        let serial = ftdi.map(|f| f.serial_number()).flatten().unwrap_or("");
-        (d, serial)
-    }).collect::<Vec<_>>();
+    let devices = all_devices
+        .iter()
+        .filter(|d| d.vendor_id() == VENDOR_SMSC && d.product_id() == PRODUCT_BRIDGE_DEV)
+        .map(|d| {
+            let same_hub = d.port_chain();
+            let same_hub = &same_hub[..same_hub.len() - 1];
+            let ftdi = all_devices.iter().find(|d| {
+                d.port_chain().starts_with(&same_hub)
+                    && d.vendor_id() == VENDOR_FTDI
+                    && d.product_id() == PRODUCT_FT234
+            });
+            let serial = ftdi.map(|f| f.serial_number()).flatten().unwrap_or("");
+            (d, serial)
+        })
+        .collect::<Vec<_>>();
     // println!("{:?}", devices);
 
     if matches!(cli.command, Commands::List) {
@@ -129,10 +149,14 @@ fn main() {
     }
     #[cfg(target_os = "linux")]
     if matches!(cli.command, Commands::Udev) {
-        let rule = r#"SUBSYSTEMS=="usb", ATTRS{idVendor}=="0424", ATTRS{idProduct}=="2530", TAG+="uaccess", GROUP="plugdev", MODE="0660""#;
-        println!("{rule}");
-        let rule = r#"SUBSYSTEMS=="usb", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", TAG+="uaccess", GROUP="plugdev", MODE="0660""#;
-        println!("{rule}");
+        println!(
+            r#"SUBSYSTEMS=="usb", ATTRS{{idVendor}}=="{:04x}", ATTRS{{idProduct}}=="{:04x}", TAG+="uaccess", GROUP="plugdev", MODE="0660""#,
+            VENDOR_SMSC, PRODUCT_BRIDGE_DEV
+        );
+        println!(
+            r#"SUBSYSTEMS=="usb", ATTRS{{idVendor}}=="{:04x}", ATTRS{{idProduct}}=="{:04x}", TAG+="uaccess", GROUP="plugdev", MODE="0660""#,
+            VENDOR_FTDI, PRODUCT_FT234
+        );
         return;
     }
 
@@ -152,32 +176,31 @@ fn main() {
                     return;
                 }
             }
-            None => {
-                devices[0].0
-            }
+            None => devices[0].0,
         }
     } else {
         match cli.serial {
-            Some(serial) => {
-                match devices.iter().find(|(_, s)| s.contains(&serial)) {
-                    Some((di, _)) => {
-                        let total_matches = devices.iter().filter_map(|(_, s)| s.contains(&serial).then_some(())).count();
-                        if total_matches == 1 {
-                            di
-                        } else {
-                            println!("Devices found, but serial provided matches more than one device");
-                            return;
-                        }
-                    },
-                    None => {
-                        println!("Devices found, but serial provided does not match any of them, device serials:");
-                        for (_di, serial) in devices {
-                            println!("{serial}");
-                        }
+            Some(serial) => match devices.iter().find(|(_, s)| s.contains(&serial)) {
+                Some((di, _)) => {
+                    let total_matches = devices
+                        .iter()
+                        .filter_map(|(_, s)| s.contains(&serial).then_some(()))
+                        .count();
+                    if total_matches == 1 {
+                        di
+                    } else {
+                        println!("Devices found, but serial provided matches more than one device");
                         return;
                     }
                 }
-            }
+                None => {
+                    println!("Devices found, but serial provided does not match any of them, device serials:");
+                    for (_di, serial) in devices {
+                        println!("{serial}");
+                    }
+                    return;
+                }
+            },
             None => {
                 println!("Several devices connected, please provide serial to select one of them, serials:");
                 for (_di, serial) in devices {
