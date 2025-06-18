@@ -1,4 +1,5 @@
-//! [Register docs: AN1940](https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ApplicationNotes/ApplicationNotes/00001940C.pdf)
+//! [GPIO Register docs: AN1940](https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ApplicationNotes/ApplicationNotes/00001940C.pdf)
+//! [Register docs](https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ApplicationNotes/ApplicationNotes/00001801C.pdf)
 
 use std::time::Duration;
 
@@ -459,3 +460,37 @@ pub struct Gpio41_45PullDown {
     #[bits(1)]
     _reserved: bool,
 }
+
+#[bitfield(u8, order = Msb)]
+pub struct Port3PowerSelect {
+    #[bits(1)]
+    pub combined_power_select: bool,
+    #[bits(1)]
+    _reserved: bool,
+    #[bits(1)]
+    pub disabled: bool,
+    #[bits(1)]
+    pub permanent: bool,
+    #[bits(4)]
+    pub prt_sel: u8,
+}
+impl_smsc_reg!(Port3PowerSelect, 0x3C08);
+
+#[bitfield(u8, order = Msb)]
+pub struct HubConfigurationDB0 {
+    #[bits(1)]
+    pub self_bus_pwr: bool,
+    #[bits(1)]
+    pub vsm_disable: bool,
+    #[bits(1)]
+    pub hs_disable: bool,
+    #[bits(1)]
+    pub mtt_enable: bool,
+    #[bits(1)]
+    pub eop_disable: bool,
+    #[bits(2)]
+    pub current_sns: u8,
+    #[bits(1)]
+    pub port_pwr: bool,
+}
+impl_smsc_reg!(HubConfigurationDB0, 0x3006);

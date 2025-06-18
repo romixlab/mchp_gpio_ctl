@@ -2,7 +2,12 @@ use nusb::MaybeFuture;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use mchp_gpio_ctl::dongle_hal_revb::{dev_power_ctl, is_dev_power_on, is_dev_pwr_fault};
+use mchp_gpio_ctl::{
+    dongle_hal_revb::{
+        dev_power_ctl, is_dev_power_on, is_dev_pwr_fault, pcb_revision, PcbRevision,
+    },
+    dongle_hal_revc::{setup_revc, slg_io_get_mode, usb_switch_is_connected, SlgPin},
+};
 
 const VENDOR_SMSC: u16 = 0x0424;
 const PRODUCT_BRIDGE_DEV: u16 = 0x2530;
@@ -27,7 +32,7 @@ enum Commands {
     On,
     /// Power off if not already off
     Off,
-    /// Print power status
+    /// Print dongle information (power status, IO config)
     Status,
     /// List connected devices serials
     List,
@@ -157,6 +162,10 @@ fn main() {
     if is_pwr_fault {
         println!("{}", "Power FAULT detected, probably short on VBUS?".red());
     }
+    let pcb_revision = pcb_revision(&interface);
+    if matches!(pcb_revision, PcbRevision::RevC) {
+        setup_revc(&interface);
+    }
 
     match &cli.command {
         Commands::On => {
@@ -181,8 +190,26 @@ fn main() {
             } else {
                 println!("Power is OFF");
             }
+            println!("PCB revision: {pcb_revision:?}");
+            if matches!(pcb_revision, PcbRevision::RevC) {
+                // TODO: GPIO config
+
+                println!(
+                    "USB switch connected: {}",
+                    usb_switch_is_connected(&interface)
+                );
+                println!(
+                    "SLG0 pin mode: {:?}",
+                    slg_io_get_mode(&interface, SlgPin::SlgIo0)
+                );
+                println!(
+                    "SLG1 pin mode: {:?}",
+                    slg_io_get_mode(&interface, SlgPin::SlgIo1)
+                );
+            }
         }
         Commands::List => {}
+
         #[cfg(target_os = "linux")]
         Commands::Udev => {}
     }

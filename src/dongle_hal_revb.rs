@@ -32,3 +32,18 @@ pub fn is_dev_pwr_fault(interface: &Interface) -> bool {
     // fault is inverted
     !read_reg::<Gpio8_10Input>(interface).gpio10_in()
 }
+
+#[derive(Debug)]
+pub enum PcbRevision {
+    RevAorB,
+    RevC,
+}
+
+pub fn pcb_revision(interface: &Interface) -> PcbRevision {
+    let is_revc = read_reg::<Gpio8_10Input>(interface).gpio9_in();
+    if is_revc {
+        PcbRevision::RevC
+    } else {
+        PcbRevision::RevAorB
+    }
+}
