@@ -478,19 +478,19 @@ impl_smsc_reg!(Port3PowerSelect, 0x3C08);
 
 #[bitfield(u8, order = Msb)]
 pub struct HubConfigurationDB0 {
-    #[bits(1)]
+    #[bits(1, access = RO)]
     pub self_bus_pwr: bool,
-    #[bits(1)]
+    #[bits(1, access = RO)]
     pub vsm_disable: bool,
-    #[bits(1)]
+    #[bits(1, access = RO)]
     pub hs_disable: bool,
-    #[bits(1)]
+    #[bits(1, access = RO)]
     pub mtt_enable: bool,
-    #[bits(1)]
+    #[bits(1, access = RO)]
     pub eop_disable: bool,
-    #[bits(2)]
+    #[bits(2, access = RO)]
     pub current_sns: u8,
-    #[bits(1)]
+    #[bits(1, access = RO)]
     pub port_pwr: bool,
 }
 impl_smsc_reg!(HubConfigurationDB0, 0x3006);
