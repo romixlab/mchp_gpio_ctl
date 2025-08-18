@@ -1,15 +1,15 @@
+use nusb::MaybeFuture;
 use std::thread::sleep;
 use std::time::Duration;
-use nusb::MaybeFuture;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use mchp_gpio_ctl::dongle_hal_revc::{slg_io_set, PinState};
+use mchp_gpio_ctl::dongle_hal_revc::{gpio_header_get, gpio_header_get_mode, slg_io_get, slg_io_set, slg_io_set_mode, usb_switch_configure, usb_switch_set, HeaderPin, PinMode, PinState};
 use mchp_gpio_ctl::{
     dongle_hal_revb::{
         dev_power_ctl, is_dev_power_on, is_dev_pwr_fault, pcb_revision, PcbRevision,
     },
-    dongle_hal_revc::{setup_revc, slg_io_get_mode, usb_switch_is_connected, SlgPin},
+    dongle_hal_revc::{usb_switch_is_connected, SlgPin},
 };
 
 const VENDOR_SMSC: u16 = 0x0424;
@@ -41,12 +41,21 @@ enum Commands {
     List,
 
     // Only on RevC
-    /// Force SDP for 10 seconds, then go back to USART mode
+    /// Force SDP for 10 seconds, then go back to USART mode, assuming switch is in USART mode (PCB RevC and up)
     SDP,
-    /// Force SDP mode (Amber LED will blink fast)
+    /// Force SDP mode (Amber LED will blink fast) (PCB RevC and up)
     ForceSDP,
-    /// Release to USART mode (Amber LED will not blink, unless switch is in SDP mode)
+    /// Release to USART mode (Amber LED will not blink, unless switch is in SDP mode) (PCB RevC and up)
     ReleaseSDP,
+
+    /// Disconnect USB data lines from a device via hardware switch (PCB RevC and up)
+    Detach,
+    /// Connect USB data lines to the device (default) (PCB RevC and up)
+    Attach,
+    /// Emulate cable detach - disconnect USB data lines, set CC lines to low and disable power to a device (PCB RevC and up)
+    FullDetach,
+    /// Emulate cable insertion - reconnect USB data lines, set CC lines according to the switch position or force-sdp command, provide power (PCB RevC and up)
+    FullAttach,
 
     /// Print udev rule to the stdout, run 'mchp_gpio_ctl udev --help' for more information
     ///
@@ -174,10 +183,10 @@ fn main() {
         println!("{}", "Power FAULT detected, probably short on VBUS?".red());
     }
     let pcb_revision = pcb_revision(&interface);
-    if matches!(pcb_revision, PcbRevision::RevC) {
-        println!("Detected PCB RevC");
-        setup_revc(&interface);
-    }
+    // if matches!(pcb_revision, PcbRevision::RevC) {
+        // println!("Detected PCB RevC");
+        // setup_revc(&interface);
+    // }
 
     match &cli.command {
         Commands::On => {
@@ -204,19 +213,27 @@ fn main() {
             }
             println!("PCB revision: {pcb_revision:?}");
             if matches!(pcb_revision, PcbRevision::RevC) {
-                // TODO: GPIO config
-
                 println!(
                     "USB switch connected: {}",
                     usb_switch_is_connected(&interface)
                 );
                 println!(
-                    "SLG0 pin mode: {:?}",
-                    slg_io_get_mode(&interface, SlgPin::SlgIo0)
+                    "Is forcing SDP mode: {:?}",
+                    slg_io_get(&interface, SlgPin::SlgIo0) == PinState::High
                 );
                 println!(
-                    "SLG1 pin mode: {:?}",
-                    slg_io_get_mode(&interface, SlgPin::SlgIo1)
+                    "Is forcing CC lines down: {:?}",
+                    slg_io_get(&interface, SlgPin::SlgIo1) == PinState::Low
+                );
+                println!(
+                    "Header pin 0 mode: {:?}, state: {:?}",
+                    gpio_header_get_mode(&interface, HeaderPin::P0),
+                    gpio_header_get(&interface, HeaderPin::P0)
+                );
+                println!(
+                    "Header pin 1 mode: {:?}, state: {:?}",
+                    gpio_header_get_mode(&interface, HeaderPin::P1),
+                    gpio_header_get(&interface, HeaderPin::P1)
                 );
             }
         }
@@ -230,6 +247,7 @@ fn main() {
                 println!("{}", "ForceSDP is not supported on PCB RevA or B".red());
                 return;
             }
+            slg_io_set_mode(&interface, SlgPin::SlgIo0, PinMode::Output);
             match &cli.command {
                 Commands::ForceSDP => {
                     slg_io_set(&interface, SlgPin::SlgIo0, PinState::High);
@@ -244,6 +262,51 @@ fn main() {
                         sleep(Duration::from_secs(1));
                     }
                     slg_io_set(&interface, SlgPin::SlgIo0, PinState::Low);
+                }
+                _ => {}
+            }
+        }
+
+        Commands::Attach | Commands::Detach => {
+            if matches!(pcb_revision, PcbRevision::RevAorB) {
+                println!(
+                    "{}",
+                    "Attach / Detach is not supported on PCB RevA or B".red()
+                );
+                return;
+            }
+            usb_switch_configure(&interface);
+            match &cli.command {
+                Commands::Attach => {
+                    usb_switch_set(&interface, true);
+                }
+                Commands::Detach => {
+                    usb_switch_set(&interface, false);
+                }
+                _ => {}
+            }
+        }
+
+        Commands::FullAttach | Commands::FullDetach => {
+            if matches!(pcb_revision, PcbRevision::RevAorB) {
+                println!(
+                    "{}",
+                    "Full Attach / Detach is not supported on PCB RevA or B".red()
+                );
+                return;
+            }
+            usb_switch_configure(&interface);
+            slg_io_set_mode(&interface, SlgPin::SlgIo1, PinMode::Output);
+            match &cli.command {
+                Commands::FullAttach => {
+                    dev_power_ctl(&interface, true);
+                    usb_switch_set(&interface, true);
+                    slg_io_set(&interface, SlgPin::SlgIo1, PinState::High);
+                }
+                Commands::FullDetach => {
+                    dev_power_ctl(&interface, false);
+                    usb_switch_set(&interface, false);
+                    slg_io_set(&interface, SlgPin::SlgIo1, PinState::Low);
                 }
                 _ => {}
             }
