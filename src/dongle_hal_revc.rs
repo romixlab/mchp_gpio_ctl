@@ -9,14 +9,12 @@
 // PIO8 - SLG_IO0 (GPIO header "2", not marked)
 // PIO3 - SLG_IO1 (GPIO header "3", not marked)
 
-use std::{thread::sleep, time::Duration};
-
 use colored::Colorize;
 use nusb::Interface;
-
 use crate::usb4604_ral::{
-    modify_reg, read_reg, Gpio0_7Dir, Gpio0_7Input, Gpio0_7Output, Gpio17_20Dir, Gpio17_20Output,
-    Gpio41_45Dir, Gpio41_45Output, Gpio8_10Dir, Gpio8_10Output,
+    modify_reg, read_reg, Gpio0_7Dir, Gpio0_7Input, Gpio0_7Output, Gpio17_20Dir, Gpio17_20Input,
+    Gpio17_20Output, Gpio41_45Dir, Gpio41_45Input, Gpio41_45Output, Gpio8_10Dir, Gpio8_10Input,
+    Gpio8_10Output,
 };
 
 #[derive(Copy, Clone, Debug)]
@@ -37,17 +35,20 @@ pub enum PinMode {
     Input,
 }
 
+#[derive(PartialEq, Debug)]
 pub enum PinState {
     High,
     Low,
 }
 
-pub fn setup_revc(interface: &Interface) {
-    modify_reg::<Gpio0_7Dir, _>(interface, |r| r.set_gpio1_out_en(true));
-    slg_io_set_mode(interface, SlgPin::SlgIo0, PinMode::Output);
-    slg_io_set_mode(interface, SlgPin::SlgIo1, PinMode::Output);
-    gpio_header_set_mode(interface, HeaderPin::P0, PinMode::Output);
-    gpio_header_set_mode(interface, HeaderPin::P1, PinMode::Output);
+// pub fn setup_revc(interface: &Interface) {
+//     modify_reg::<Gpio0_7Dir, _>(interface, |r| r.set_gpio1_out_en(true)); // USB switch
+//
+//     slg_io_set_mode(interface, SlgPin::SlgIo0, PinMode::Output); // pull down inside SLG
+//     slg_io_set_mode(interface, SlgPin::SlgIo1, PinMode::Output); // pull up inside SLG
+//
+//     gpio_header_set_mode(interface, HeaderPin::P0, PinMode::Output);
+//     gpio_header_set_mode(interface, HeaderPin::P1, PinMode::Output);
 
     // for _ in 0..10000 {
     //     gpio_header_set(interface, HeaderPin::P0, PinState::High);
@@ -63,7 +64,7 @@ pub fn setup_revc(interface: &Interface) {
     //     slg_io_set(interface, SlgPin::SlgIo1, PinState::Low);
     //     sleep(Duration::from_millis(100));
     // }
-}
+// }
 
 pub fn gpio_header_set_mode(interface: &Interface, pin: HeaderPin, mode: PinMode) {
     let out_en = matches!(mode, PinMode::Output);
@@ -102,6 +103,33 @@ pub fn gpio_header_set(interface: &Interface, pin: HeaderPin, state: PinState) {
         HeaderPin::P1 => {
             modify_reg::<Gpio41_45Output, _>(interface, |r| r.set_gpio44_out(is_high));
         }
+    }
+}
+
+pub fn gpio_header_get(interface: &Interface, pin: HeaderPin) -> PinState {
+    let mode = gpio_header_get_mode(interface, pin);
+    let is_high = match pin {
+        HeaderPin::P0 => match mode {
+            PinMode::Output => {
+                read_reg::<Gpio17_20Output>(interface).gpio19_out()
+            }
+            PinMode::Input => {
+                read_reg::<Gpio17_20Input>(interface).gpio19_in()
+            }
+        },
+        HeaderPin::P1 => match mode {
+            PinMode::Output => {
+                read_reg::<Gpio41_45Output>(interface).gpio44_out()
+            }
+            PinMode::Input => {
+                read_reg::<Gpio41_45Input>(interface).gpio44_in()
+            }
+        },
+    };
+    if is_high {
+        PinState::High
+    } else {
+        PinState::Low
     }
 }
 
@@ -145,11 +173,47 @@ pub fn slg_io_set(interface: &Interface, pin: SlgPin, state: PinState) {
     }
 }
 
+pub fn slg_io_get(interface: &Interface, pin: SlgPin) -> PinState {
+    let mode = slg_io_get_mode(interface, pin);
+    let is_high = match pin {
+        SlgPin::SlgIo0 => match mode {
+            PinMode::Output => {
+                read_reg::<Gpio8_10Output>(interface).gpio8_out()
+            }
+            PinMode::Input => {
+                read_reg::<Gpio8_10Input>(interface).gpio8_in()
+            }
+        },
+        SlgPin::SlgIo1 => match mode {
+            PinMode::Output => {
+                read_reg::<Gpio0_7Output>(interface).gpio3_out()
+            }
+            PinMode::Input => {
+                read_reg::<Gpio0_7Input>(interface).gpio3_in()
+            }
+        },
+    };
+    if is_high {
+        PinState::High
+    } else {
+        PinState::Low
+    }
+}
+
+pub fn usb_switch_configure(interface: &Interface) {
+    modify_reg::<Gpio0_7Dir, _>(interface, |r| r.set_gpio1_out_en(true)); // USB switch
+}
+
 pub fn usb_switch_set(interface: &Interface, is_connected: bool) {
     // 0 means the USB switch is connected to a device
     modify_reg::<Gpio0_7Output, _>(interface, |r| r.set_gpio1_out(!is_connected));
 }
 
 pub fn usb_switch_is_connected(interface: &Interface) -> bool {
-    !read_reg::<Gpio0_7Input>(interface).gpio1_in()
+    let is_input = read_reg::<Gpio0_7Input>(interface).gpio1_in();
+    if is_input {
+        !read_reg::<Gpio0_7Input>(interface).gpio1_in()
+    } else {
+        !read_reg::<Gpio0_7Output>(interface).gpio1_out()
+    }
 }
