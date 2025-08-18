@@ -1,7 +1,10 @@
+use std::thread::sleep;
+use std::time::Duration;
 use nusb::MaybeFuture;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use mchp_gpio_ctl::dongle_hal_revc::{slg_io_set, PinState};
 use mchp_gpio_ctl::{
     dongle_hal_revb::{
         dev_power_ctl, is_dev_power_on, is_dev_pwr_fault, pcb_revision, PcbRevision,
@@ -36,6 +39,14 @@ enum Commands {
     Status,
     /// List connected devices serials
     List,
+
+    // Only on RevC
+    /// Force SDP for 10 seconds, then go back to USART mode
+    SDP,
+    /// Force SDP mode (Amber LED will blink fast)
+    ForceSDP,
+    /// Release to USART mode (Amber LED will not blink, unless switch is in SDP mode)
+    ReleaseSDP,
 
     /// Print udev rule to the stdout, run 'mchp_gpio_ctl udev --help' for more information
     ///
@@ -164,6 +175,7 @@ fn main() {
     }
     let pcb_revision = pcb_revision(&interface);
     if matches!(pcb_revision, PcbRevision::RevC) {
+        println!("Detected PCB RevC");
         setup_revc(&interface);
     }
 
@@ -212,5 +224,29 @@ fn main() {
 
         #[cfg(target_os = "linux")]
         Commands::Udev => {}
+
+        Commands::ForceSDP | Commands::ReleaseSDP | Commands::SDP => {
+            if matches!(pcb_revision, PcbRevision::RevAorB) {
+                println!("{}", "ForceSDP is not supported on PCB RevA or B".red());
+                return;
+            }
+            match &cli.command {
+                Commands::ForceSDP => {
+                    slg_io_set(&interface, SlgPin::SlgIo0, PinState::High);
+                }
+                Commands::ReleaseSDP => {
+                    slg_io_set(&interface, SlgPin::SlgIo0, PinState::Low);
+                }
+                Commands::SDP => {
+                    slg_io_set(&interface, SlgPin::SlgIo0, PinState::High);
+                    for i in (1..=10).rev() {
+                        println!("{i}");
+                        sleep(Duration::from_secs(1));
+                    }
+                    slg_io_set(&interface, SlgPin::SlgIo0, PinState::Low);
+                }
+                _ => {}
+            }
+        }
     }
 }
