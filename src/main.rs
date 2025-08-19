@@ -18,6 +18,7 @@ use mchp_gpio_ctl::{
 
 const VENDOR_SMSC: u16 = 0x0424;
 const PRODUCT_BRIDGE_DEV: u16 = 0x2530;
+const PRODUCT_USB4604_HUB: u16 = 0x4502;
 
 const VENDOR_FTDI: u16 = 0x0403;
 const PRODUCT_FT234: u16 = 0x6015;
@@ -107,14 +108,18 @@ fn main() {
                     && d.product_id() == PRODUCT_FT234
             });
             let serial = ftdi.map(|f| f.serial_number()).flatten().unwrap_or("");
-            (d, serial)
+            let hub = all_devices.iter().find(|d| {
+                d.port_chain().starts_with(&same_hub) && d.vendor_id() == VENDOR_SMSC && d.product_id() == PRODUCT_USB4604_HUB
+            });
+            let product_string = hub.and_then(|h| h.product_string()).unwrap_or("");
+            (d, serial, product_string)
         })
         .collect::<Vec<_>>();
     // println!("{:?}", devices);
 
     if matches!(cli.command, Commands::List) {
         println!("Connected device list:");
-        for (_di, serial) in devices {
+        for (_di, serial, _product_string) in devices {
             println!("{serial}");
         }
         return;
@@ -132,36 +137,36 @@ fn main() {
         return;
     }
 
-    let di = if devices.len() == 0 {
+    let (di, product_string) = if devices.len() == 0 {
         println!("No devices found");
         return;
     } else if devices.len() == 1 {
         match cli.serial {
             Some(serial) => {
                 if devices[0].1.contains(&serial) {
-                    devices[0].0
+                    (devices[0].0, devices[0].2)
                 } else {
                     println!(
                         "Devices found, but serial provided does not match any of them, device serials:"
                     );
-                    for (_di, serial) in devices {
+                    for (_di, serial, _product_string) in devices {
                         println!("{serial}");
                     }
                     return;
                 }
             }
-            None => devices[0].0,
+            None => (devices[0].0, devices[0].2)
         }
     } else {
         match cli.serial {
-            Some(serial) => match devices.iter().find(|(_, s)| s.contains(&serial)) {
-                Some((di, _)) => {
+            Some(serial) => match devices.iter().find(|(_, s, _p)| s.contains(&serial)) {
+                Some((di, _, product_string)) => {
                     let total_matches = devices
                         .iter()
-                        .filter_map(|(_, s)| s.contains(&serial).then_some(()))
+                        .filter_map(|(_, s, _p)| s.contains(&serial).then_some(()))
                         .count();
                     if total_matches == 1 {
-                        di
+                        (*di, *product_string)
                     } else {
                         println!("Devices found, but serial provided matches more than one device");
                         return;
@@ -171,7 +176,7 @@ fn main() {
                     println!(
                         "Devices found, but serial provided does not match any of them, device serials:"
                     );
-                    for (_di, serial) in devices {
+                    for (_di, serial, _product_string) in devices {
                         println!("{serial}");
                     }
                     return;
@@ -181,7 +186,7 @@ fn main() {
                 println!(
                     "Several devices connected, please provide serial to select one of them, serials:"
                 );
-                for (_di, serial) in devices {
+                for (_di, serial, _product_string) in devices {
                     println!("{serial}");
                 }
                 return;
@@ -214,6 +219,7 @@ fn main() {
     // println!("Detected PCB RevC");
     // setup_revc(&interface);
     // }
+    let is_relay_variant = product_string.contains("relay");
 
     match &cli.command {
         Commands::On => {
@@ -239,6 +245,9 @@ fn main() {
                 println!("Power is OFF");
             }
             println!("PCB revision: {pcb_revision:?}");
+            if is_relay_variant {
+                println!("SSR (opto-relay) variant");
+            }
             if matches!(pcb_revision, PcbRevision::RevC) {
                 println!(
                     "USB switch connected: {}",
@@ -252,11 +261,25 @@ fn main() {
                     "Is forcing CC lines down: {:?}",
                     slg_io_get(&interface, SlgPin::SlgIo1) == PinState::Low
                 );
-                println!(
-                    "Header pin 0 mode: {:?}, state: {:?}",
-                    gpio_header_get_mode(&interface, HeaderPin::P0),
-                    gpio_header_get(&interface, HeaderPin::P0)
-                );
+                if is_relay_variant {
+                    let mode = gpio_header_get_mode(&interface, HeaderPin::P0);
+                    if mode == PinMode::Input {
+                        println!("{}", "Relay pin p0 is configured as Input, relay won't work".yellow());
+                    } else {
+                        let state = gpio_header_get(&interface, HeaderPin::P0);
+                        if state == PinState::High {
+                            println!("Relay state: Short (p0 high)");
+                        } else {
+                            println!("Relay state: Open (p0 low)");
+                        }
+                    }
+                } else {
+                    println!(
+                        "Header pin 0 mode: {:?}, state: {:?}",
+                        gpio_header_get_mode(&interface, HeaderPin::P0),
+                        gpio_header_get(&interface, HeaderPin::P0)
+                    );
+                }
                 println!(
                     "Header pin 1 mode: {:?}, state: {:?}",
                     gpio_header_get_mode(&interface, HeaderPin::P1),
@@ -346,6 +369,9 @@ fn main() {
             }
             match &cli.command {
                 Commands::GpioConfig { pin, mode } => {
+                    if is_relay_variant && *pin == HeaderPin::P0 && *mode == PinMode::Input {
+                        println!("{}", "Configuring relay control pin as input, relay won't work".yellow()); 
+                    }
                     gpio_header_set_mode(&interface, *pin, *mode);
                 }
                 Commands::GpioSet { pin, state } => {

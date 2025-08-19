@@ -18,7 +18,7 @@ use clap::ValueEnum;
 use colored::Colorize;
 use nusb::Interface;
 
-#[derive(Copy, Clone, Debug, ValueEnum)]
+#[derive(Copy, Clone, PartialEq, Debug, ValueEnum)]
 pub enum HeaderPin {
     #[value(alias = "P0")]
     P0,
