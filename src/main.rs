@@ -137,14 +137,14 @@ fn main() {
         return;
     }
 
-    let (di, product_string) = if devices.len() == 0 {
+    let (di, serial, product_string) = if devices.len() == 0 {
         println!("No devices found");
         return;
     } else if devices.len() == 1 {
         match cli.serial {
             Some(serial) => {
                 if devices[0].1.contains(&serial) {
-                    (devices[0].0, devices[0].2)
+                    (devices[0].0, devices[0].1, devices[0].2)
                 } else {
                     println!(
                         "Devices found, but serial provided does not match any of them, device serials:"
@@ -155,18 +155,18 @@ fn main() {
                     return;
                 }
             }
-            None => (devices[0].0, devices[0].2)
+            None => (devices[0].0, devices[0].1, devices[0].2)
         }
     } else {
         match cli.serial {
             Some(serial) => match devices.iter().find(|(_, s, _p)| s.contains(&serial)) {
-                Some((di, _, product_string)) => {
+                Some((di, serial, product_string)) => {
                     let total_matches = devices
                         .iter()
-                        .filter_map(|(_, s, _p)| s.contains(&serial).then_some(()))
+                        .filter_map(|(_, s, _p)| s.contains(serial).then_some(()))
                         .count();
                     if total_matches == 1 {
-                        (*di, *product_string)
+                        (*di, *serial, *product_string)
                     } else {
                         println!("Devices found, but serial provided matches more than one device");
                         return;
@@ -239,6 +239,7 @@ fn main() {
             }
         }
         Commands::Status => {
+            println!("Dongle serial: {serial}");
             if is_pwr_on {
                 println!("Power is ON");
             } else {
@@ -370,7 +371,7 @@ fn main() {
             match &cli.command {
                 Commands::GpioConfig { pin, mode } => {
                     if is_relay_variant && *pin == HeaderPin::P0 && *mode == PinMode::Input {
-                        println!("{}", "Configuring relay control pin as input, relay won't work".yellow()); 
+                        println!("{}", "Configuring relay control pin as input, relay won't work".yellow());
                     }
                     gpio_header_set_mode(&interface, *pin, *mode);
                 }
