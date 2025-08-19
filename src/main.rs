@@ -199,7 +199,7 @@ fn main() {
         Err(e) => {
             println!("Failed to open device: {}", e);
             #[cfg(target_os = "linux")]
-            if e.kind() == nusb::ErrorKind::PermissionDenied {
+            if e.kind() == nusb::ErrorKind::PermissionDenied || e.os_error() == Some(13) {
                 println!(
                     "You are probably missing an udev rule, run 'mchp_gpio_ctl --help' to see how to install it"
                 );
