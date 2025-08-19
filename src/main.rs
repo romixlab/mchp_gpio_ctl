@@ -62,12 +62,12 @@ enum Commands {
     /// Emulate cable insertion - reconnect USB data lines, set CC lines according to the switch position or force-sdp command, provide power (PCB RevC and up)
     FullAttach,
 
-    /// Configure GPIO header pin as Input or Output (PCB RevC and up)
+    /// Configure GPIO header pin (p0 or p1) as Input or Output (e.g., gpio-config p0 output) (PCB RevC and up)
     GpioConfig {
         pin: HeaderPin,
         mode: PinMode,
     },
-    /// Set GPIO header pin configured as Output to High or Low (PCB RevC and up)
+    /// Set GPIO header pin configured as Output to High or Low (e.g., gpio-set p0 high) (PCB RevC and up)
     GpioSet {
         pin: HeaderPin,
         state: PinState,
