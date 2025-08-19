@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use bitfield_struct::bitfield;
 use nusb::{
-    transfer::{ControlIn, ControlOut, ControlType, Recipient},
     Interface, MaybeFuture,
+    transfer::{ControlIn, ControlOut, ControlType, Recipient},
 };
 
 pub trait SmscReg {
