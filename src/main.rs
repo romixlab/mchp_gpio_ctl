@@ -47,11 +47,11 @@ enum Commands {
 
     // Only on RevC
     /// Force SDP for 10 seconds, then go back to USART mode, assuming switch is in USART mode (PCB RevC and up)
-    SDP,
+    Sdp,
     /// Force SDP mode (Amber LED will blink fast) (PCB RevC and up)
-    ForceSDP,
+    ForceSdp,
     /// Release to USART mode (Amber LED will not blink, unless switch is in SDP mode) (PCB RevC and up)
-    ReleaseSDP,
+    ReleaseSdp,
 
     /// Disconnect USB data lines from a device via hardware switch (PCB RevC and up)
     Detach,
@@ -103,13 +103,13 @@ fn main() {
             let same_hub = d.port_chain();
             let same_hub = &same_hub[..same_hub.len() - 1];
             let ftdi = all_devices.iter().find(|d| {
-                d.port_chain().starts_with(&same_hub)
+                d.port_chain().starts_with(same_hub)
                     && d.vendor_id() == VENDOR_FTDI
                     && d.product_id() == PRODUCT_FT234
             });
-            let serial = ftdi.map(|f| f.serial_number()).flatten().unwrap_or("");
+            let serial = ftdi.and_then(|f| f.serial_number()).unwrap_or("");
             let hub = all_devices.iter().find(|d| {
-                d.port_chain().starts_with(&same_hub) && d.vendor_id() == VENDOR_SMSC && d.product_id() == PRODUCT_USB4604_HUB
+                d.port_chain().starts_with(same_hub) && d.vendor_id() == VENDOR_SMSC && d.product_id() == PRODUCT_USB4604_HUB
             });
             let product_string = hub.and_then(|h| h.product_string()).unwrap_or("");
             (d, serial, product_string)
@@ -137,7 +137,7 @@ fn main() {
         return;
     }
 
-    let (di, serial, product_string) = if devices.len() == 0 {
+    let (di, serial, product_string) = if devices.is_empty() {
         println!("No devices found");
         return;
     } else if devices.len() == 1 {
@@ -293,20 +293,20 @@ fn main() {
         #[cfg(target_os = "linux")]
         Commands::Udev => {}
 
-        Commands::ForceSDP | Commands::ReleaseSDP | Commands::SDP => {
+        Commands::ForceSdp | Commands::ReleaseSdp | Commands::Sdp => {
             if matches!(pcb_revision, PcbRevision::RevAorB) {
                 println!("{}", "ForceSDP is not supported on PCB RevA or B".red());
                 return;
             }
             slg_io_set_mode(&interface, SlgPin::SlgIo0, PinMode::Output);
             match &cli.command {
-                Commands::ForceSDP => {
+                Commands::ForceSdp => {
                     slg_io_set(&interface, SlgPin::SlgIo0, PinState::High);
                 }
-                Commands::ReleaseSDP => {
+                Commands::ReleaseSdp => {
                     slg_io_set(&interface, SlgPin::SlgIo0, PinState::Low);
                 }
-                Commands::SDP => {
+                Commands::Sdp => {
                     slg_io_set(&interface, SlgPin::SlgIo0, PinState::High);
                     for i in (1..=10).rev() {
                         println!("{i}");
