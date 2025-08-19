@@ -263,7 +263,7 @@ dependencies = [
 
 [[package]]
 name = "mchp_gpio_ctl"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "bitfield-struct",
  "clap",
