@@ -4,12 +4,16 @@ use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use mchp_gpio_ctl::dongle_hal_revc::{gpio_header_get, gpio_header_get_mode, slg_io_get, slg_io_set, slg_io_set_mode, usb_switch_configure, usb_switch_set, HeaderPin, PinMode, PinState};
+use mchp_gpio_ctl::dongle_hal_revc::{
+    HeaderPin, PinMode, PinState, gpio_header_get, gpio_header_get_mode, gpio_header_set,
+    gpio_header_set_mode, slg_io_get, slg_io_set, slg_io_set_mode, usb_switch_configure,
+    usb_switch_set,
+};
 use mchp_gpio_ctl::{
     dongle_hal_revb::{
-        dev_power_ctl, is_dev_power_on, is_dev_pwr_fault, pcb_revision, PcbRevision,
+        PcbRevision, dev_power_ctl, is_dev_power_on, is_dev_pwr_fault, pcb_revision,
     },
-    dongle_hal_revc::{usb_switch_is_connected, SlgPin},
+    dongle_hal_revc::{SlgPin, usb_switch_is_connected},
 };
 
 const VENDOR_SMSC: u16 = 0x0424;
@@ -56,6 +60,21 @@ enum Commands {
     FullDetach,
     /// Emulate cable insertion - reconnect USB data lines, set CC lines according to the switch position or force-sdp command, provide power (PCB RevC and up)
     FullAttach,
+
+    /// Configure GPIO header pin as Input or Output (PCB RevC and up)
+    GpioConfig {
+        pin: HeaderPin,
+        mode: PinMode,
+    },
+    /// Set GPIO header pin configured as Output to High or Low (PCB RevC and up)
+    GpioSet {
+        pin: HeaderPin,
+        state: PinState,
+    },
+    /// Read GPIO header pin state (PCB RevC and up)
+    GpioGet {
+        pin: HeaderPin,
+    },
 
     /// Print udev rule to the stdout, run 'mchp_gpio_ctl udev --help' for more information
     ///
@@ -122,7 +141,9 @@ fn main() {
                 if devices[0].1.contains(&serial) {
                     devices[0].0
                 } else {
-                    println!("Devices found, but serial provided does not match any of them, device serials:");
+                    println!(
+                        "Devices found, but serial provided does not match any of them, device serials:"
+                    );
                     for (_di, serial) in devices {
                         println!("{serial}");
                     }
@@ -147,7 +168,9 @@ fn main() {
                     }
                 }
                 None => {
-                    println!("Devices found, but serial provided does not match any of them, device serials:");
+                    println!(
+                        "Devices found, but serial provided does not match any of them, device serials:"
+                    );
                     for (_di, serial) in devices {
                         println!("{serial}");
                     }
@@ -155,7 +178,9 @@ fn main() {
                 }
             },
             None => {
-                println!("Several devices connected, please provide serial to select one of them, serials:");
+                println!(
+                    "Several devices connected, please provide serial to select one of them, serials:"
+                );
                 for (_di, serial) in devices {
                     println!("{serial}");
                 }
@@ -170,7 +195,9 @@ fn main() {
             println!("Failed to open device: {}", e);
             #[cfg(target_os = "linux")]
             if e.kind() == std::io::ErrorKind::PermissionDenied {
-                println!("You are probably missing an udev rule, run 'mchp_gpio_ctl --help' to see how to install it");
+                println!(
+                    "You are probably missing an udev rule, run 'mchp_gpio_ctl --help' to see how to install it"
+                );
             }
             return;
         }
@@ -184,8 +211,8 @@ fn main() {
     }
     let pcb_revision = pcb_revision(&interface);
     // if matches!(pcb_revision, PcbRevision::RevC) {
-        // println!("Detected PCB RevC");
-        // setup_revc(&interface);
+    // println!("Detected PCB RevC");
+    // setup_revc(&interface);
     // }
 
     match &cli.command {
@@ -307,6 +334,26 @@ fn main() {
                     dev_power_ctl(&interface, false);
                     usb_switch_set(&interface, false);
                     slg_io_set(&interface, SlgPin::SlgIo1, PinState::Low);
+                }
+                _ => {}
+            }
+        }
+
+        Commands::GpioConfig { .. } | Commands::GpioSet { .. } | Commands::GpioGet { .. } => {
+            if matches!(pcb_revision, PcbRevision::RevAorB) {
+                println!("{}", "GPIO is not supported on PCB RevA or B".red());
+                return;
+            }
+            match &cli.command {
+                Commands::GpioConfig { pin, mode } => {
+                    gpio_header_set_mode(&interface, *pin, *mode);
+                }
+                Commands::GpioSet { pin, state } => {
+                    gpio_header_set(&interface, *pin, *state);
+                }
+                Commands::GpioGet { pin } => {
+                    let state = gpio_header_get(&interface, *pin);
+                    println!("{pin:?} = {state:?}");
                 }
                 _ => {}
             }

@@ -9,17 +9,20 @@
 // PIO8 - SLG_IO0 (GPIO header "2", not marked)
 // PIO3 - SLG_IO1 (GPIO header "3", not marked)
 
+use crate::usb4604_ral::{
+    Gpio0_7Dir, Gpio0_7Input, Gpio0_7Output, Gpio8_10Dir, Gpio8_10Input, Gpio8_10Output,
+    Gpio17_20Dir, Gpio17_20Input, Gpio17_20Output,
+    modify_reg, read_reg,
+};
+use clap::ValueEnum;
 use colored::Colorize;
 use nusb::Interface;
-use crate::usb4604_ral::{
-    modify_reg, read_reg, Gpio0_7Dir, Gpio0_7Input, Gpio0_7Output, Gpio17_20Dir, Gpio17_20Input,
-    Gpio17_20Output, Gpio41_45Dir, Gpio41_45Input, Gpio41_45Output, Gpio8_10Dir, Gpio8_10Input,
-    Gpio8_10Output,
-};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum HeaderPin {
+    #[value(alias = "P0")]
     P0,
+    #[value(alias = "P1")]
     P1,
 }
 
@@ -29,15 +32,19 @@ pub enum SlgPin {
     SlgIo1,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, ValueEnum)]
 pub enum PinMode {
+    #[value(alias = "Output")]
     Output,
+    #[value(alias = "Input")]
     Input,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, ValueEnum)]
 pub enum PinState {
+    #[value(alias = "High")]
     High,
+    #[value(alias = "Low")]
     Low,
 }
 
@@ -50,20 +57,20 @@ pub enum PinState {
 //     gpio_header_set_mode(interface, HeaderPin::P0, PinMode::Output);
 //     gpio_header_set_mode(interface, HeaderPin::P1, PinMode::Output);
 
-    // for _ in 0..10000 {
-    //     gpio_header_set(interface, HeaderPin::P0, PinState::High);
-    //     gpio_header_set(interface, HeaderPin::P1, PinState::High);
-    //     // usb_switch_set(interface, false);
-    //     slg_io_set(interface, SlgPin::SlgIo0, PinState::High);
-    //     slg_io_set(interface, SlgPin::SlgIo1, PinState::High);
-    //     sleep(Duration::from_millis(100));
-    //     gpio_header_set(interface, HeaderPin::P0, PinState::Low);
-    //     gpio_header_set(interface, HeaderPin::P1, PinState::Low);
-    //     // usb_switch_set(interface, true);
-    //     slg_io_set(interface, SlgPin::SlgIo0, PinState::Low);
-    //     slg_io_set(interface, SlgPin::SlgIo1, PinState::Low);
-    //     sleep(Duration::from_millis(100));
-    // }
+// for _ in 0..10000 {
+//     gpio_header_set(interface, HeaderPin::P0, PinState::High);
+//     gpio_header_set(interface, HeaderPin::P1, PinState::High);
+//     // usb_switch_set(interface, false);
+//     slg_io_set(interface, SlgPin::SlgIo0, PinState::High);
+//     slg_io_set(interface, SlgPin::SlgIo1, PinState::High);
+//     sleep(Duration::from_millis(100));
+//     gpio_header_set(interface, HeaderPin::P0, PinState::Low);
+//     gpio_header_set(interface, HeaderPin::P1, PinState::Low);
+//     // usb_switch_set(interface, true);
+//     slg_io_set(interface, SlgPin::SlgIo0, PinState::Low);
+//     slg_io_set(interface, SlgPin::SlgIo1, PinState::Low);
+//     sleep(Duration::from_millis(100));
+// }
 // }
 
 pub fn gpio_header_set_mode(interface: &Interface, pin: HeaderPin, mode: PinMode) {
@@ -73,7 +80,7 @@ pub fn gpio_header_set_mode(interface: &Interface, pin: HeaderPin, mode: PinMode
             modify_reg::<Gpio17_20Dir, _>(interface, |r| r.set_gpio19_out_en(out_en));
         }
         HeaderPin::P1 => {
-            modify_reg::<Gpio41_45Dir, _>(interface, |r| r.set_gpio44_out_en(out_en));
+            modify_reg::<Gpio17_20Dir, _>(interface, |r| r.set_gpio20_out_en(out_en));
         }
     }
 }
@@ -81,7 +88,7 @@ pub fn gpio_header_set_mode(interface: &Interface, pin: HeaderPin, mode: PinMode
 pub fn gpio_header_get_mode(interface: &Interface, pin: HeaderPin) -> PinMode {
     let is_output = match pin {
         HeaderPin::P0 => read_reg::<Gpio17_20Dir>(interface).gpio19_out_en(),
-        HeaderPin::P1 => read_reg::<Gpio41_45Dir>(interface).gpio44_out_en(),
+        HeaderPin::P1 => read_reg::<Gpio17_20Dir>(interface).gpio20_out_en(),
     };
     if is_output {
         PinMode::Output
@@ -101,7 +108,7 @@ pub fn gpio_header_set(interface: &Interface, pin: HeaderPin, state: PinState) {
             modify_reg::<Gpio17_20Output, _>(interface, |r| r.set_gpio19_out(is_high));
         }
         HeaderPin::P1 => {
-            modify_reg::<Gpio41_45Output, _>(interface, |r| r.set_gpio44_out(is_high));
+            modify_reg::<Gpio17_20Output, _>(interface, |r| r.set_gpio20_out(is_high));
         }
     }
 }
@@ -110,20 +117,12 @@ pub fn gpio_header_get(interface: &Interface, pin: HeaderPin) -> PinState {
     let mode = gpio_header_get_mode(interface, pin);
     let is_high = match pin {
         HeaderPin::P0 => match mode {
-            PinMode::Output => {
-                read_reg::<Gpio17_20Output>(interface).gpio19_out()
-            }
-            PinMode::Input => {
-                read_reg::<Gpio17_20Input>(interface).gpio19_in()
-            }
+            PinMode::Output => read_reg::<Gpio17_20Output>(interface).gpio19_out(),
+            PinMode::Input => read_reg::<Gpio17_20Input>(interface).gpio19_in(),
         },
         HeaderPin::P1 => match mode {
-            PinMode::Output => {
-                read_reg::<Gpio41_45Output>(interface).gpio44_out()
-            }
-            PinMode::Input => {
-                read_reg::<Gpio41_45Input>(interface).gpio44_in()
-            }
+            PinMode::Output => read_reg::<Gpio17_20Output>(interface).gpio20_out(),
+            PinMode::Input => read_reg::<Gpio17_20Input>(interface).gpio20_in(),
         },
     };
     if is_high {
@@ -177,20 +176,12 @@ pub fn slg_io_get(interface: &Interface, pin: SlgPin) -> PinState {
     let mode = slg_io_get_mode(interface, pin);
     let is_high = match pin {
         SlgPin::SlgIo0 => match mode {
-            PinMode::Output => {
-                read_reg::<Gpio8_10Output>(interface).gpio8_out()
-            }
-            PinMode::Input => {
-                read_reg::<Gpio8_10Input>(interface).gpio8_in()
-            }
+            PinMode::Output => read_reg::<Gpio8_10Output>(interface).gpio8_out(),
+            PinMode::Input => read_reg::<Gpio8_10Input>(interface).gpio8_in(),
         },
         SlgPin::SlgIo1 => match mode {
-            PinMode::Output => {
-                read_reg::<Gpio0_7Output>(interface).gpio3_out()
-            }
-            PinMode::Input => {
-                read_reg::<Gpio0_7Input>(interface).gpio3_in()
-            }
+            PinMode::Output => read_reg::<Gpio0_7Output>(interface).gpio3_out(),
+            PinMode::Input => read_reg::<Gpio0_7Input>(interface).gpio3_in(),
         },
     };
     if is_high {

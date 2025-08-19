@@ -1,7 +1,7 @@
 use nusb::Interface;
 
 use crate::usb4604_ral::{
-    modify_reg, read_reg, Gpio0_7Dir, Gpio0_7Output, Gpio8_10Dir, Gpio8_10Input,
+    Gpio0_7Dir, Gpio0_7Output, Gpio8_10Dir, Gpio8_10Input, modify_reg, read_reg,
 };
 
 // RevA and RevB board:
